@@ -1,127 +1,117 @@
 import streamlit as st
 import requests
 from bs4 import BeautifulSoup
-import pandas as pd
-import time
+import os
+from urllib.parse import urljoin
 
-class DarkEdenScraper:
+class WebScraper:
     @staticmethod
-    def scrape_website(url):
+    def scrape_all(url):
         """
-        Generic web scraping method with error handling
-        
+        Scrapes HTML, CSS, JS, and other resources from a webpage.
+
         :param url: URL to scrape
-        :return: Pandas DataFrame with scraped data
+        :return: Dictionary with scraped data
         """
         try:
             # Add headers to mimic browser request
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
             }
-            
+
             # Fetch the webpage
             response = requests.get(url, headers=headers)
             response.raise_for_status()
-            
+
             # Parse with BeautifulSoup
             soup = BeautifulSoup(response.text, 'html.parser')
-            
-            # Extract table data (generic approach)
-            table = soup.find('table')
-            
-            if not table:
-                st.warning("No table found on the page. Unable to scrape data.")
-                return pd.DataFrame()
-            
-            # Extract headers
-            headers = [header.text.strip() for header in table.find_all('th')]
-            
-            # Extract rows
-            rows = []
-            for row in table.find_all('tr')[1:]:  # Skip header row
-                cols = row.find_all('td')
-                row_data = [col.text.strip() for col in cols]
-                
-                # Only add row if it has data
-                if row_data:
-                    rows.append(row_data)
-            
-            # Create DataFrame
-            if headers and rows:
-                df = pd.DataFrame(rows, columns=headers[:len(rows[0])])
-                return df
-            else:
-                st.warning("Could not extract meaningful data from the table.")
-                return pd.DataFrame()
-        
+
+            # Extract HTML
+            html_content = soup.prettify()
+
+            # Extract CSS and JS links
+            css_links = [urljoin(url, link['href']) for link in soup.find_all('link', rel='stylesheet', href=True)]
+            js_links = [urljoin(url, script['src']) for script in soup.find_all('script', src=True)]
+
+            # Extract images
+            img_links = [urljoin(url, img['src']) for img in soup.find_all('img', src=True)]
+
+            return {
+                "html": html_content,
+                "css": css_links,
+                "js": js_links,
+                "images": img_links
+            }
         except requests.RequestException as e:
             st.error(f"Error fetching webpage: {e}")
-            return pd.DataFrame()
+            return {}
         except Exception as e:
             st.error(f"Unexpected error during scraping: {e}")
-            return pd.DataFrame()
+            return {}
+
 
 def main():
     # Set page configuration
     st.set_page_config(
-        page_title="DarkEden Web Scraper",
-        page_icon="🕸️",
+        page_title="Enhanced Web Scraper",
+        page_icon="🔍",
         layout="wide"
     )
-    
+
     # Title and description
-    st.title("🌐 DarkEden Web Scraper")
-    st.write("Enter a URL to scrape tabular data from a webpage")
-    
+    st.title("Enhanced Web Scraper")
+    st.write("Enter a URL to scrape HTML, CSS, JavaScript, and image data.")
+
     # URL Input
     url = st.text_input(
-        "Enter Website URL", 
-        placeholder="https://example.com/darkeden/data",
-        help="Paste the full URL of the webpage containing the data you want to scrape"
+        "Enter Website URL",
+        placeholder="https://example.com",
+        help="Paste the full URL of the webpage you want to scrape."
     )
-    
+
     # Scrape Button
-    if st.button("Scrape Website 🚀", type="primary"):
+    if st.button("Scrape Website", type="primary"):
         # Validate URL
         if not url:
-            st.warning("Please enter a valid URL")
+            st.warning("Please enter a valid URL.")
             return
-        
+
         # Progress indicators
         with st.spinner("Scraping website... Please wait"):
-            # Perform scraping
-            scraped_df = DarkEdenScraper.scrape_website(url)
-        
+            scraped_data = WebScraper.scrape_all(url)
+
         # Display results
-        if not scraped_df.empty:
-            # Display DataFrame
+        if scraped_data:
             st.success("Scraping completed successfully!")
-            
-            # Data Preview
-            st.subheader("Scraped Data Preview")
-            st.dataframe(scraped_df)
-            
-            # Download Button
-            csv = scraped_df.to_csv(index=False)
+
+            # Display HTML
+            st.subheader("HTML Content")
+            st.code(scraped_data.get("html", "No HTML content found"), language="html")
+
+            # Display CSS Links
+            st.subheader("CSS Files")
+            st.write(scraped_data.get("css", "No CSS files found"))
+
+            # Display JS Links
+            st.subheader("JavaScript Files")
+            st.write(scraped_data.get("js", "No JavaScript files found"))
+
+            # Display Image Links
+            st.subheader("Image Files")
+            st.write(scraped_data.get("images", "No images found"))
+
+            # Download raw HTML
             st.download_button(
-                label="Download CSV 📥",
-                data=csv,
-                file_name='scraped_data.csv',
-                mime='text/csv',
-                help="Download the scraped data as a CSV file"
+                label="Download HTML",
+                data=scraped_data.get("html", ""),
+                file_name="scraped_page.html",
+                mime="text/html",
+                help="Download the scraped HTML content."
             )
-            
-            # Additional DataFrame insights
-            st.subheader("Data Insights")
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.metric("Total Rows", len(scraped_df))
-            
-            with col2:
-                st.metric("Total Columns", len(scraped_df.columns))
+
         else:
-            st.error("No data could be scraped. Please check the URL and webpage structure.")
+            st.error("Failed to scrape any data. Please check the URL and try again.")
+
 
 # Run the Streamlit app
 if __name__ == "__main__":
